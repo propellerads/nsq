@@ -47,3 +47,7 @@ profile
 
 # vim stuff
 *.sw[op]
+
+# IDEA stuff
+*.iml
+.idea
