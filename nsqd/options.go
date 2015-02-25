@@ -14,6 +14,7 @@ type nsqdOptions struct {
 	// basic options
 	ID                     int64    `flag:"worker-id" cfg:"id"`
 	Verbose                bool     `flag:"verbose"`
+	Quiet                  bool     `flag:"quiet"`
 	TCPAddress             string   `flag:"tcp-address"`
 	HTTPAddress            string   `flag:"http-address"`
 	HTTPSAddress           string   `flag:"https-address"`

@@ -61,7 +61,9 @@ func (p *protocolV2) IOLoop(conn net.Conn) error {
 		// ie. the returned slice is only valid until the next call to it
 		line, err = client.Reader.ReadSlice('\n')
 		if err != nil {
-			err = fmt.Errorf("failed to read command - %s", err)
+			if !p.ctx.nsqd.opts.Quiet || err != io.EOF {
+				err = fmt.Errorf("failed to read command - %s", err)
+			}
 			break
 		}
 
@@ -105,8 +107,9 @@ func (p *protocolV2) IOLoop(conn net.Conn) error {
 			}
 		}
 	}
-
-	p.ctx.nsqd.logf("PROTOCOL(V2): [%s] exiting ioloop", client)
+	if !p.ctx.nsqd.opts.Quiet {
+		p.ctx.nsqd.logf("PROTOCOL(V2): [%s] exiting ioloop", client)
+	}
 	conn.Close()
 	close(client.ExitChan)
 	if client.Channel != nil {
@@ -313,7 +316,9 @@ func (p *protocolV2) messagePump(client *clientV2, startedChan chan bool) {
 	}
 
 exit:
-	p.ctx.nsqd.logf("PROTOCOL(V2): [%s] exiting messagePump", client)
+	if !p.ctx.nsqd.opts.Quiet {
+		p.ctx.nsqd.logf("PROTOCOL(V2): [%s] exiting messagePump", client)
+	}
 	heartbeatTicker.Stop()
 	outputBufferTicker.Stop()
 	if err != nil {
