@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 type Topic struct {

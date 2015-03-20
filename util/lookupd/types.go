@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/bitly/nsq/util"
-	"github.com/bitly/nsq/util/semver"
+	"github.com/propellerads/nsq/util"
+	"github.com/propellerads/nsq/util/semver"
 )
 
 type ProducerTopic struct {

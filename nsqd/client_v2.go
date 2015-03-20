@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bitly/nsq/util/auth"
+	"github.com/propellerads/nsq/util/auth"
 	"github.com/mreiferson/go-snappystream"
 )
 

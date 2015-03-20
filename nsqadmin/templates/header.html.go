@@ -82,7 +82,7 @@ $(document).ready(function () {
           <li class="divider-vertical"></li>
           {{template "graph_options.html" .}}
           <li class="divider-vertical"></li>
-          <li><a href="https://github.com/bitly/nsq">NSQ on github</a></li>
+          <li><a href="https://github.com/propellerads/nsq">NSQ on github</a></li>
         </ul>
         <div class="pull-right navbar-text"><span class="label label-info">v{{.Version}}</span></div>
     </div>

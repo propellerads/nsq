@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 type httpServer struct {

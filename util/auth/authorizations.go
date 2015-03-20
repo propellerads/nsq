@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 type Authorization struct {

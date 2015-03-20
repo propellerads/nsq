@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bitly/nsq/util"
-	"github.com/bitly/nsq/util/lookupd"
+	"github.com/propellerads/nsq/util"
+	"github.com/propellerads/nsq/util/lookupd"
 )
 
 var (

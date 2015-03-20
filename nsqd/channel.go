@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bitly/nsq/util"
-	"github.com/bitly/nsq/util/pqueue"
+	"github.com/propellerads/nsq/util"
+	"github.com/propellerads/nsq/util/pqueue"
 )
 
 // the amount of time a worker will wait when idle

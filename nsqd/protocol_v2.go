@@ -14,7 +14,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 const maxTimeout = time.Hour

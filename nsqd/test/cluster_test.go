@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 func equal(t *testing.T, act, exp interface{}) {

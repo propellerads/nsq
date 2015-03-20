@@ -4,7 +4,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 type tcpServer struct {

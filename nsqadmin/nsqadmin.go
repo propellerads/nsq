@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 type NSQAdmin struct {

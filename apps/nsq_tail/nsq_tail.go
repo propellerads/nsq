@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/bitly/go-nsq"
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 var (

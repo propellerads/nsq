@@ -5,7 +5,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/bitly/nsq/util"
+	"github.com/propellerads/nsq/util"
 )
 
 type NSQLookupd struct {
