@@ -1,6 +1,6 @@
 PREFIX=/usr/local
 DESTDIR=
-GOFLAGS=
+GOFLAGS=-a -tags netgo -installsuffix netgo
 BINDIR=${PREFIX}/bin
 
 NSQD_SRCS = $(wildcard apps/nsqd/*.go nsqd/*.go nsq/*.go util/*.go util/pqueue/*.go)
