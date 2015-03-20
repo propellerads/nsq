@@ -80,6 +80,7 @@ func nsqFlagset() *flag.FlagSet {
 	flagSet.String("config", "", "path to config file")
 	flagSet.Bool("version", false, "print version string")
 	flagSet.Bool("verbose", false, "enable verbose logging")
+	flagSet.Bool("quiet", false, "disable annoyed logging")
 	flagSet.Int64("worker-id", 0, "unique seed for message ID generation (int) in range [0,4096) (will default to a hash of hostname)")
 	flagSet.String("https-address", "", "<addr>:<port> to listen on for HTTPS clients")
 	flagSet.String("http-address", "0.0.0.0:4151", "<addr>:<port> to listen on for HTTP clients")
