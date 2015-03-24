@@ -31,7 +31,8 @@ var (
 	maxInFlight = flag.Int("max-in-flight", 200, "max number of messages to allow in flight")
 
 	outputDir      = flag.String("output-dir", "/tmp", "directory to write output files to")
-	tempDir        string
+	tmpAndRename   = flag.Bool("tmp-and-rename", false, "When set, files will be written to <output-dir>/tmp and moved on rotate to <output-dir>. If file with same name exists, \".<number>\" suffix will be added.")
+	writeDir       string // dir to write files.
 	datetimeFormat = flag.String("datetime-format", "%Y-%m-%d_%H", "strftime compatible format for <DATETIME> in filename format")
 	filenameFormat = flag.String("filename-format", "<TOPIC>.<HOST><REV>.<DATETIME>.log", "output filename format (<TOPIC>, <HOST>, <PID>, <DATETIME>, <REV> are replaced. <REV> is increased when file already exists)")
 	hostIdentifier = flag.String("host-identifier", "", "value to output in log filename in place of hostname. <SHORT_HOST> and <HOSTNAME> are valid replacement tokens")
@@ -198,12 +199,14 @@ func (f *FileLogger) Close() {
 		filename := f.out.Name()
 		f.out.Close()
 		f.out = nil
-		moveFileToOutputDir(filename)
+		if *tmpAndRename {
+			moveFileToOutputDir(filename)
+		}
 	}
 }
 
 func moveFileToOutputDir(srcFilename string) {
-	relative, err := filepath.Rel(tempDir, srcFilename)
+	relative, err := filepath.Rel(writeDir, srcFilename)
 	if err != nil {
 		log.Fatalf("Could not determine full destination path to file (looks like this is internal error): %v", err)
 	}
@@ -236,7 +239,7 @@ func moveFileToOutputDir(srcFilename string) {
 }
 
 func moveAllFilesFromTempDir() {
-	err := filepath.Walk(tempDir, moveToOutputWalkFunc)
+	err := filepath.Walk(writeDir, moveToOutputWalkFunc)
 	if os.IsNotExist(err) {
 		return
 	}
@@ -314,7 +317,7 @@ func (f *FileLogger) updateFile() {
 	f.lastFilename = filename
 	f.lastOpenTime = time.Now()
 
-	fullPath := path.Join(tempDir, filename)
+	fullPath := path.Join(writeDir, filename)
 	dir, _ := filepath.Split(fullPath)
 	if dir != "" {
 		err := os.MkdirAll(dir, 0770)
@@ -527,8 +530,10 @@ func main() {
 		fmt.Printf("nsq_to_file v%s\n", util.BINARY_VERSION)
 		return
 	}
-
-	tempDir = filepath.Join(*outputDir, "/tmp")
+	writeDir = *outputDir
+	if *tmpAndRename {
+		writeDir = filepath.Join(*outputDir, "/tmp")
+	}
 
 	if *channel == "" {
 		log.Fatal("--channel is required")
@@ -562,7 +567,9 @@ func main() {
 		}
 	}
 
-	moveAllFilesFromTempDir()
+	if *tmpAndRename {
+		moveAllFilesFromTempDir()
+	}
 
 	discoverer := newTopicDiscoverer()
 
