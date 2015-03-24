@@ -31,6 +31,8 @@ var (
 	maxInFlight = flag.Int("max-in-flight", 200, "max number of messages to allow in flight")
 
 	outputDir      = flag.String("output-dir", "/tmp", "directory to write output files to")
+	tmpAndRename   = flag.Bool("tmp-and-rename", false, "When set, files will be written to <output-dir>/tmp and moved on rotate to <output-dir>. If file with same name exists, \".<number>\" suffix will be added.")
+	writeDir       string // dir to write files.
 	datetimeFormat = flag.String("datetime-format", "%Y-%m-%d_%H", "strftime compatible format for <DATETIME> in filename format")
 	filenameFormat = flag.String("filename-format", "<TOPIC>.<HOST><REV>.<DATETIME>.log", "output filename format (<TOPIC>, <HOST>, <PID>, <DATETIME>, <REV> are replaced. <REV> is increased when file already exists)")
 	hostIdentifier = flag.String("host-identifier", "", "value to output in log filename in place of hostname. <SHORT_HOST> and <HOSTNAME> are valid replacement tokens")
@@ -194,9 +196,66 @@ func (f *FileLogger) Close() {
 		if f.gzipWriter != nil {
 			f.gzipWriter.Close()
 		}
+		filename := f.out.Name()
 		f.out.Close()
 		f.out = nil
+		if *tmpAndRename {
+			moveFileToOutputDir(filename)
+		}
 	}
+}
+
+func moveFileToOutputDir(srcFilename string) {
+	relative, err := filepath.Rel(writeDir, srcFilename)
+	if err != nil {
+		log.Fatalf("Could not determine full destination path to file (looks like this is internal error): %v", err)
+	}
+	destFilename := filepath.Join(*outputDir, relative)
+
+	// Check that we will not overwrite existing file
+	// XXX: There is tiny race here if someone creates file with same name befor os.Rename
+	// XXX: doing this really atomically is kinda complicated (wrapping another syscall)
+	if _, err := os.Stat(destFilename); !os.IsNotExist(err) {
+		suffix := 0
+		for {
+			checkDst := fmt.Sprintf("%s.%v", destFilename, suffix)
+			if _, err := os.Stat(checkDst); os.IsNotExist(err) {
+				destFilename = checkDst
+				break
+			}
+			suffix++
+		}
+	}
+	log.Printf("INFO: renaming %s -> %s", srcFilename, destFilename)
+	destDir := filepath.Dir(destFilename)
+	err = os.MkdirAll(destDir, 0770)
+	if err != nil {
+		log.Fatalf("Could not create directories %s: %v", err)
+	}
+	err = os.Rename(srcFilename, destFilename)
+	if err != nil {
+		log.Fatalf("Could not rename %s -> %s: %v", srcFilename, destFilename, err)
+	}
+}
+
+func moveAllFilesFromTempDir() {
+	err := filepath.Walk(writeDir, moveToOutputWalkFunc)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		log.Fatalf("Could not move files from temp folder: %v", err)
+	}
+}
+
+func moveToOutputWalkFunc(name string, info os.FileInfo, err error) error {
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		moveFileToOutputDir(name)
+	}
+	return nil
 }
 
 func (f *FileLogger) Write(p []byte) (n int, err error) {
@@ -258,7 +317,7 @@ func (f *FileLogger) updateFile() {
 	f.lastFilename = filename
 	f.lastOpenTime = time.Now()
 
-	fullPath := path.Join(*outputDir, filename)
+	fullPath := path.Join(writeDir, filename)
 	dir, _ := filepath.Split(fullPath)
 	if dir != "" {
 		err := os.MkdirAll(dir, 0770)
@@ -471,6 +530,10 @@ func main() {
 		fmt.Printf("nsq_to_file v%s\n", util.BINARY_VERSION)
 		return
 	}
+	writeDir = *outputDir
+	if *tmpAndRename {
+		writeDir = filepath.Join(*outputDir, "/tmp")
+	}
 
 	if *channel == "" {
 		log.Fatal("--channel is required")
@@ -502,6 +565,10 @@ func main() {
 		default:
 			log.Fatalf("invalid --gzip-compression value (%d), should be 1,2,3", *gzipCompression)
 		}
+	}
+
+	if *tmpAndRename {
+		moveAllFilesFromTempDir()
 	}
 
 	discoverer := newTopicDiscoverer()
