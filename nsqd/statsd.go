@@ -40,7 +40,9 @@ func (n *NSQD) statsdLoop() {
 				continue
 			}
 
-			n.logf("STATSD: pushing stats to %s", statsd)
+			if !n.opts.Quiet {
+				n.logf("STATSD: pushing stats to %s", statsd)
+			}
 
 			stats := n.GetStats()
 			for _, topic := range stats {
