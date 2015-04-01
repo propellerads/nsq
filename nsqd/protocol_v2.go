@@ -85,9 +85,7 @@ func (p *protocolV2) IOLoop(conn net.Conn) error {
 			if parentErr := err.(util.ChildErr).Parent(); parentErr != nil {
 				ctx = " - " + parentErr.Error()
 			}
-			if !p.ctx.nsqd.opts.Quiet || err != io.EOF {
-				p.ctx.nsqd.logf("ERROR: [%s] - %s%s", client, err, ctx)
-			}
+			p.ctx.nsqd.logf("ERROR: [%s] - %s%s", client, err, ctx)
 
 			sendErr := p.Send(client, frameTypeError, []byte(err.Error()))
 			if sendErr != nil {
