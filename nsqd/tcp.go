@@ -45,8 +45,7 @@ func (p *tcpServer) Handle(clientConn net.Conn) {
 	}
 
 	err = prot.IOLoop(clientConn)
-	if err != nil {
+	if err != nil && !(p.ctx.nsqd.opts.Quiet && err == io.EOF) {
 		p.ctx.nsqd.logf("ERROR: client(%s) - %s", clientConn.RemoteAddr(), err)
-		return
 	}
 }
