@@ -19,9 +19,9 @@ import (
 	"syscall"
 	"time"
 
+	"bufio"
 	"github.com/bitly/go-nsq"
-	//"github.com/pierrec/lz4"
-	"github.com/pierrec/lz4"
+	"github.com/ikkeps/lz4"
 	"github.com/propellerads/nsq/util"
 	"github.com/propellerads/nsq/util/lookupd"
 )
@@ -38,7 +38,7 @@ var (
 	datetimeFormat = flag.String("datetime-format", "%Y-%m-%d_%H", "strftime compatible format for <DATETIME> in filename format")
 	filenameFormat = flag.String("filename-format", "<TOPIC>.<HOST><REV>.<DATETIME>.log", "output filename format (<TOPIC>, <HOST>, <PID>, <DATETIME>, <REV> are replaced. <REV> is increased when file already exists)")
 	hostIdentifier = flag.String("host-identifier", "", "value to output in log filename in place of hostname. <SHORT_HOST> and <HOSTNAME> are valid replacement tokens")
-	gzipLevel      = flag.Int("gzip-level", 6, "gzip compression level (1-9, 1=BestSpeed, 9=BestCompression)")
+	compressLevel  = flag.Int("compress-level", 6, "compression level for gzip and lz4 (1-9, 1=BestSpeed, 9=BestCompression). For lz4, 9 is best compression, 1-8 is best speed.")
 	gzipEnabled    = flag.Bool("gzip", false, "gzip output files.")
 	lz4Enabled     = flag.Bool("lz4", false, "use lz4 to compress output files.")
 	skipEmptyFiles = flag.Bool("skip-empty-files", false, "Skip writting empty files")
@@ -60,6 +60,8 @@ const (
 	NO_COMPRESS CompressMethod = 0
 	GZIP                       = iota
 	LZ4                        = iota
+
+	LZ4_BUF_SIZE = 65536
 )
 
 func init() {
@@ -279,7 +281,6 @@ func (f *FileLogger) Write(p []byte) (n int, err error) {
 }
 
 func (f *FileLogger) Sync() error {
-	var err error
 	if f.compressWriter != nil {
 		f.compressWriter.Close()
 		f.compressWriter = f.newCompressWriter()
@@ -291,14 +292,7 @@ func (f *FileLogger) Sync() error {
 func (f *FileLogger) newCompressWriter() io.WriteCloser {
 	switch f.compressMethod {
 	case LZ4:
-		cw := lz4.NewWriter(f)
-		cw.Header = lz4.Header{
-			BlockChecksum:   false,
-			BlockDependency: true,
-			NoChecksum:      true,
-			HighCompression: f.compressLevel >= 9,
-		}
-		return cw
+		return newLz4Writer(f, f.compressLevel)
 	case GZIP:
 		cw, _ := gzip.NewWriterLevel(f, f.compressLevel)
 		return cw
@@ -457,7 +451,7 @@ func hasArg(s string) bool {
 }
 
 func newConsumerFileLogger(topic string) (*ConsumerFileLogger, error) {
-	f, err := NewFileLogger(*gzipEnabled, *lz4Enabled, *gzipLevel, *filenameFormat, topic)
+	f, err := NewFileLogger(*gzipEnabled, *lz4Enabled, *compressLevel, *filenameFormat, topic)
 	if err != nil {
 		return nil, err
 	}
@@ -590,8 +584,8 @@ func main() {
 		log.Fatalf("you shold use either --lz4 or --gzip, not both")
 	}
 
-	if *gzipLevel < 1 || *gzipLevel > 9 {
-		log.Fatalf("invalid --gzip-level value (%d), should be 1-9", *gzipLevel)
+	if *compressLevel < 1 || *compressLevel > 9 {
+		log.Fatalf("invalid --compress-level value (%d), should be 1-9", *compressLevel)
 	}
 
 	if *tmpAndRename {
@@ -630,4 +624,37 @@ func main() {
 	}
 
 	discoverer.watch(lookupdHTTPAddrs, topicsFromNSQLookupd, *topicPattern)
+}
+
+// lz4Writer combines buffer and lz4 and have methods to properly flush everything
+// Logic is bw -> lz4 -> original writer
+type lz4Writer struct {
+	bw   *bufio.Writer
+	lz4w *lz4.Writer
+}
+
+func newLz4Writer(w io.Writer, compressLevel int) *lz4Writer {
+	lz4w := lz4.NewWriter(w)
+	lz4w.Header = lz4.Header{
+		BlockChecksum:   false,
+		BlockDependency: false,
+		NoChecksum:      true,
+		HighCompression: compressLevel >= 9,
+	}
+	return &lz4Writer{
+		lz4w: lz4w,
+		bw:   bufio.NewWriterSize(lz4w, LZ4_BUF_SIZE),
+	}
+}
+
+func (l *lz4Writer) Write(p []byte) (int, error) {
+	return l.bw.Write(p)
+}
+
+func (l *lz4Writer) Close() error {
+	err := l.bw.Flush()
+	if err != nil {
+		return err
+	}
+	return l.lz4w.Close()
 }
