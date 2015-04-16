@@ -21,7 +21,7 @@ import (
 
 	"bufio"
 	"github.com/bitly/go-nsq"
-	"github.com/ikkeps/lz4"
+	"github.com/pierrec/lz4"
 	"github.com/propellerads/nsq/util"
 	"github.com/propellerads/nsq/util/lookupd"
 )
