@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	workerIdBits   = uint64(10)
+	workerIdBits   = uint64(12)
 	sequenceBits   = uint64(12)
 	workerIdShift  = sequenceBits
 	timestampShift = sequenceBits + workerIdBits
-	sequenceMask   = int64(-1) ^ (int64(-1) << sequenceBits)
+	sequenceMask   = 1 << sequenceBits - 1
 
 	// Tue, 21 Mar 2006 20:50:14.000 GMT
 	twepoch = int64(1288834974657)
