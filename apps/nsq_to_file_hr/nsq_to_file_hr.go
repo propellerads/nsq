@@ -283,12 +283,11 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 	output := make([]*nsq.Message, *maxInFlight)
 	sync := false
 	ticker := time.NewTicker(time.Duration(30) * time.Second)
+	closeFileTicker := time.NewTicker(time.Hour)
+
 	closing := false
 	closeFile := false
 	exit := false
-
-	//start := time.Now()
-	//count := 0
 
 	for {
 		select {
@@ -310,6 +309,9 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 		case <-ticker.C:
 			sync = true
 
+		case <-closeFileTicker.C:
+			f.refreshFiles()
+
 		case m := <-f.logChan:
 
 			hour := GetMessageHour(m)
@@ -328,15 +330,7 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 			if pos == cap(output) {
 				sync = true
 			}
-		//count ++
-
 		}
-
-		//if count > 100 {
-		//	log.Printf("100 messages by %v", time.Now().Sub(start))
-		//	count = 0
-		//	start = time.Now()
-		//}
 
 		if closing || sync || r.IsStarved() {
 			if pos > 0 {
@@ -364,19 +358,23 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 }
 
 func (f *FileLoggerHourRotator) Close() error {
-	log.Printf("closing all files")
-	for _, fi := range f.files {
+	for fn, fi := range f.files {
+		log.Printf("Close: %v", fn)
 		fi.Close()
 	}
 	return nil
 }
 
-func (f *FileLoggerHourRotator) Write(p []byte) (n int, err error) {
+func (f *FileLoggerHourRotator) refreshFiles() {
+	f.Close()
+	f.files = map[string]*FileHandler{}
+}
+
+func (f *FileLoggerHourRotator) Write(p []byte) (int, error) {
 	return f.files[f.currentHour].out.Write(p)
 }
 
 func (flhr *FileLoggerHourRotator) Sync() {
-	log.Printf("Syncing all files...")
 	for h, f := range flhr.files {
 		log.Printf("Sync: %v", h)
 		if f.compressWriter != nil {
@@ -418,14 +416,7 @@ func (f *FileLoggerHourRotator) openFile() {
 	var err error
 	fh := &FileHandler{}
 
-	openFlag := os.O_WRONLY | os.O_CREATE
-	if f.compressMethod != NO_COMPRESS {
-		openFlag |= os.O_EXCL
-	} else {
-		openFlag |= os.O_APPEND
-	}
-
-	out, err := os.OpenFile(fullPath, openFlag, 0666)
+	out, err := os.OpenFile(fullPath, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("ERROR: %s. Unable to open %s", err, fullPath)
 	}
@@ -498,7 +489,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("nsq_to_file v%s\n", util.BINARY_VERSION)
+		fmt.Printf("nsq_to_file_rh v%s\n", util.BINARY_VERSION)
 		return
 	}
 	writeDir = *outputDir
@@ -520,7 +511,7 @@ func main() {
 	}
 
 	if *lz4Enabled && *gzipEnabled {
-		log.Fatalf("you shold use either --lz4 or --gzip, not both")
+		log.Fatal("you shold use either --lz4 or --gzip, not both")
 	}
 
 	if *compressLevel < 1 || *compressLevel > 9 {
@@ -559,6 +550,7 @@ func main() {
 			log.Fatalf("ERROR: couldn't create logger for topic %s: %s", topic, err)
 		}
 		discoverer.topics[topic] = logger
+		log.Printf("Start topic router %v", topic)
 		go discoverer.StartTopicRouter(logger)
 	}
 
