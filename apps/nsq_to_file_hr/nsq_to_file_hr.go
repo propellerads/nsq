@@ -53,6 +53,9 @@ var (
 	lookupdHTTPAddrs = util.StringArray{}
 	topics = util.StringArray{}
 
+	syncEvery = time.Duration(30) * time.Second
+	closeEvery = time.Hour
+
 	writeDir string // dir to write files.
 )
 
@@ -265,9 +268,9 @@ type FileLoggerHourRotator struct {
 func (l *FileLoggerHourRotator) GetHourWriter(hour string) io.Writer {
 	if l.currentHour != hour {
 		l.currentHour = hour
-		if _, ok := l.files[l.currentHour]; !ok {
-			l.openFile()
-		}
+	}
+	if f, ok := l.files[l.currentHour]; !ok || f.out == nil {
+		l.openFile()
 	}
 	return l.files[l.currentHour].writer
 }
@@ -282,8 +285,8 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 	pos := 0
 	output := make([]*nsq.Message, *maxInFlight)
 	sync := false
-	ticker := time.NewTicker(time.Duration(30) * time.Second)
-	closeFileTicker := time.NewTicker(time.Hour)
+	syncTicker := time.NewTicker(syncEvery)
+	closeFileTicker := time.NewTicker(closeEvery)
 
 	closing := false
 	closeFile := false
@@ -297,7 +300,7 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 			exit = true
 
 		case <-f.termChan:
-			ticker.Stop()
+			syncTicker.Stop()
 			r.Stop()
 			sync = true
 			closing = true
@@ -306,14 +309,13 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 			sync = true
 			closeFile = true
 
-		case <-ticker.C:
+		case <-syncTicker.C:
 			sync = true
 
 		case <-closeFileTicker.C:
 			f.refreshFiles()
 
 		case m := <-f.logChan:
-
 			hour := GetMessageHour(m)
 			writer := f.GetHourWriter(hour)
 			_, err := writer.Write(m.Body)
