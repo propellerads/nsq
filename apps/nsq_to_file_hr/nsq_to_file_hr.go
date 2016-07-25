@@ -69,16 +69,16 @@ const (
 	LZ4_BUF_SIZE = 65536
 )
 
-func GetMessageHour(m *nsq.Message) string {
+func GetMessageHour(body []byte) string {
 	date := make([]byte, 0, 17)
 	var semCount int
-	for i := range m.Body {
-		if m.Body[i] == CSVSemicolon {
+	for i := range body {
+		if body[i] == CSVSemicolon {
 			semCount ++
 			continue
 		}
 		if semCount == 1 {
-			date = append(date, m.Body[i])
+			date = append(date, body[i])
 		} else if semCount > 1 {
 			break
 		}
@@ -262,17 +262,6 @@ type FileLoggerHourRotator struct {
 
 	//for many files and rotating by hour in messages
 	files          map[string]*FileHandler
-	currentHour    string
-}
-
-func (l *FileLoggerHourRotator) GetHourWriter(hour string) io.Writer {
-	if l.currentHour != hour {
-		l.currentHour = hour
-	}
-	if f, ok := l.files[l.currentHour]; !ok || f.out == nil {
-		l.openFile()
-	}
-	return l.files[l.currentHour].writer
 }
 
 func (l *FileLoggerHourRotator) HandleMessage(m *nsq.Message) error {
@@ -316,15 +305,10 @@ func (f *FileLoggerHourRotator) router(r *nsq.Consumer) {
 			f.refreshFiles()
 
 		case m := <-f.logChan:
-			hour := GetMessageHour(m)
-			writer := f.GetHourWriter(hour)
-			_, err := writer.Write(m.Body)
+			m.Body = append(m.Body, '\n')
+			_, err := f.Write(m.Body)
 			if err != nil {
 				log.Fatalf("ERROR: writing message to disk - %s", err)
-			}
-			_, err = writer.Write([]byte("\n"))
-			if err != nil {
-				log.Fatalf("ERROR: writing newline to disk - %s", err)
 			}
 
 			output[pos] = m
@@ -373,45 +357,63 @@ func (f *FileLoggerHourRotator) refreshFiles() {
 }
 
 func (f *FileLoggerHourRotator) Write(p []byte) (int, error) {
-	return f.files[f.currentHour].out.Write(p)
+	hour := GetMessageHour(p)
+	var fileHandler *FileHandler
+
+	if fh, contains := f.files[hour]; contains {
+		fileHandler = fh
+	} else {
+		fh, err := f.openFile(hour)
+		if err != nil {
+			return 0, err
+		}
+		f.files[hour] = fh
+		fileHandler = fh
+
+		log.Printf("will write to file [%v]", fileHandler.out.Name())
+	}
+
+	return fileHandler.writer.Write(p)
 }
 
 func (flhr *FileLoggerHourRotator) Sync() {
 	for h, f := range flhr.files {
 		log.Printf("Sync: %v", h)
+		f.Sync()
 		if f.compressWriter != nil {
 			f.compressWriter.Close()
-			f.compressWriter = flhr.newCompressWriter()
+			f.compressWriter = flhr.newCompressWriter(f.out)
 			f.writer = f.compressWriter
 		}
-		f.Sync()
+
 	}
 }
 
-func (f *FileLoggerHourRotator) newCompressWriter() io.WriteCloser {
+func (f *FileLoggerHourRotator) newCompressWriter(file *os.File) io.WriteCloser {
 	switch f.compressMethod {
 	case LZ4:
-		return NewLz4Writer(f, f.compressLevel)
+		return NewLz4Writer(file, f.compressLevel)
 	case GZIP:
-		cw, _ := gzip.NewWriterLevel(f, f.compressLevel)
+		cw, _ := gzip.NewWriterLevel(file, f.compressLevel)
 		return cw
 	}
 	return f
 }
 
-func (f *FileLoggerHourRotator) calculateCurrentFilename() string {
-	result := strings.Replace(f.filenameFormat, "<DATETIME>", f.currentHour, -1)
+func (f *FileLoggerHourRotator) calculateCurrentFilename(hour string) string {
+	result := strings.Replace(f.filenameFormat, "<DATETIME>", hour, -1)
 	return result
 }
 
-func (f *FileLoggerHourRotator) openFile() {
-	filename := f.calculateCurrentFilename()
+func (f *FileLoggerHourRotator) openFile(hour string) (*FileHandler, error) {
+	filename := f.calculateCurrentFilename(hour)
 	fullPath := path.Join(writeDir, filename)
 	dir, _ := filepath.Split(fullPath)
 	if dir != "" {
 		err := os.MkdirAll(dir, 0770)
 		if err != nil {
 			log.Fatalf("ERROR: %s Unable to create %s", err, dir)
+			return nil, err
 		}
 	}
 
@@ -421,17 +423,17 @@ func (f *FileLoggerHourRotator) openFile() {
 	out, err := os.OpenFile(fullPath, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("ERROR: %s. Unable to open %s", err, fullPath)
+		return nil, err
 	}
 	fh.out = out
 
 	if f.compressMethod != NO_COMPRESS {
-		fh.compressWriter = f.newCompressWriter()
+		fh.compressWriter = f.newCompressWriter(fh.out)
 		fh.writer = fh.compressWriter
 	} else {
 		fh.writer = f
 	}
-
-	f.files[f.currentHour] = fh
+	return fh, nil
 }
 
 func NewFileHourRotateLogger(gzipEnabled, lz4Enabled bool, compressionLevel int, filenameFormat, topic string) (*FileLoggerHourRotator, error) {
